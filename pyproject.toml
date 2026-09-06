@@ -1,0 +1,79 @@
+[project]
+name = "app-dataloganalysis"
+version = "0.1.0"
+description = "面向汽车时序数据的确定性、可解释规则分析平台"
+readme = "README.md"
+authors = [
+    { name = "zhangsan", email = "m1411476109@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = []
+
+[project.optional-dependencies]
+can = [
+    "cantools>=40,<42",
+    "python-can>=4.5,<5",
+]
+report = [
+    "jinja2>=3.1,<4",
+]
+
+[project.scripts]
+app-dataloganalysis = "app_dataloganalysis:main"
+
+[build-system]
+requires = ["uv_build>=0.12.10,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv]
+required-version = "==0.12.10"
+
+[dependency-groups]
+dev = [
+    { include-group = "lint" },
+    { include-group = "test" },
+]
+lint = [
+    "mypy>=1.17,<2",
+    "ruff>=0.12,<1",
+]
+test = [
+    "pytest>=8.4,<10",
+    "pytest-cov>=6.2,<8",
+]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+show_error_codes = true
+
+[tool.pytest.ini_options]
+addopts = [
+    "--strict-config",
+    "--strict-markers",
+    "--cov=app_dataloganalysis",
+    "--cov-report=term-missing",
+    "--cov-fail-under=100",
+]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["app_dataloganalysis"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src", "tests", "scripts"]
+extend-exclude = ["docs"]
+
+[tool.ruff.lint]
+select = ["B", "E", "F", "I", "RUF", "UP"]
+
+[tool.ruff.format]
+quote-style = "double"
