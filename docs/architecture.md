@@ -146,7 +146,7 @@ RuleRuntime -> RuleResult
 Infrastructure Adapter                        Core Boundary
 
 BLFReader ----\
-               -> RawFrame -> DbcDecoder -> NormalizedEventSink -> DataEvent
+               -> RawFrame -> DbcDecoder -> NormalizedStreamEventSink -> DataEvent
 ASCReader ----/                         |             |
                                         + Quality     + Watermark/Gap/End
 ```

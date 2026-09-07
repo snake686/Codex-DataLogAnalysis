@@ -58,7 +58,14 @@ class RawFrame:
 
 ### Normalized Event
 
-Core Runtime 接受以下 Discriminated Union：
+Core Runtime 的流元素使用以下 Discriminated Union：
+
+```text
+NormalizedStreamEvent = NormalizedTransaction | Watermark | EndOfStream
+TransactionItem = SignalUpdate | QualityUpdate | GapStart | GapEnd
+```
+
+其中 Transaction Item 的字段为：
 
 - `SignalUpdate(event_id, timestamp_ns, source_id, transaction_id, transaction_sequence, item_index, source_key, value, value_type, unit_id, quality, provenance_ref)`；
 - `QualityUpdate(..., source_key/scope, quality, reason_code)`；
@@ -69,9 +76,11 @@ Core Runtime 接受以下 Discriminated Union：
 
 Value 仅允许 `bool | int | float | str` 以及带 Enum Domain ID 的 Scalar。Python 中 `bool` 是 `int` 子类，Validator/Decoder 必须先检查 Bool，禁止误归类为 Int。NaN/Infinity 默认映射为 `quality=INVALID`；除非未来 Block 明确支持，否则不得作为 Good Numeric Value。
 
-一个 RawFrame 解码得到一个 Normalized Transaction，其中全部 SignalUpdate 原子生效。`transaction_sequence` 来自 `frame_sequence`，不能随 Selective Decode 的 Signal 数量改变；`item_index` 按 DBC 中稳定 Signal Order 分配。`source_id` 表示输入事件生产者/Artifact，不等于 CAN Channel，Channel 是独立字段。Synthetic/CSV Adapter 也必须明确 Transaction Boundary。同一 Transaction 中同一 `source_key` 出现两次是 Adapter Error。
+一个 RawFrame 解码得到一个 Normalized Transaction，其中全部 Transaction Item 原子生效。`transaction_sequence` 来自 `frame_sequence`，不能随 Selective Decode 的 Signal 数量改变；`item_index` 按 DBC 中稳定 Signal Order 分配。`source_id` 表示输入事件生产者/Artifact，不等于 CAN Channel，Channel 是独立字段。Synthetic/CSV Adapter 也必须明确 Transaction Boundary。
 
-DBC 默认输出经过 Scale/Offset 的 Physical Value。Enum 使用 `EnumValue(code, label, domain_id)`，其中 Code 是语义 Identity，Label 用于展示。DBC Minimum/Maximum 默认只作为 Metadata，不自动把超界值判为 INVALID；只有 Analysis Policy 明确启用 Range Validation 时才产生 `OUT_OF_RANGE`。
+同一 Transaction 中每个 `source_key` 最多产生一个最终状态：`SignalUpdate` 与显式覆盖该 Key 的 `QualityUpdate` 冲突，多个 Source-key Quality Scope 也不得重叠。`GapStart`/`GapEnd` 必须独占一个 Control Transaction；Whole-input 或 Channel Scope 的 `QualityUpdate` 同样必须独占 Transaction。恢复 GOOD 状态使用新的 Good `SignalUpdate` 或 `GapEnd`，不得用 `QualityUpdate(GOOD, ...)`。Quality 与 Reason 必须使用规范配对：`MISSING/DATA_MISSING`、`STALE/DATA_STALE`、`INVALID/INVALID_VALUE`、`DECODE_ERROR/DECODE_ERROR`、`OUT_OF_RANGE/OUT_OF_RANGE`、`UNAVAILABLE/MULTIPLEX_INACTIVE`。`GapStart` 使用 `DATA_GAP`。
+
+DBC 默认输出经过 Scale/Offset 的 Physical Value。Enum 使用仅限关键字参数的 `EnumValue(code=..., domain_id=..., label=...)`，其中 Code 和 Domain ID 共同构成语义 Identity，Label 仅用于展示。DBC Minimum/Maximum 默认只作为 Metadata，不自动把超界值判为 INVALID；只有 Analysis Policy 明确启用 Range Validation 时才产生 `OUT_OF_RANGE`。
 
 Multiplexed Signal 只在其 Branch Active 时产生 Good SignalUpdate。当同一 Message 的 Selector 明确切换到其他 Branch 时，Decoder 必须为已订阅且变为 Inactive 的 Signal 产生 `QualityUpdate(UNAVAILABLE, MULTIPLEX_INACTIVE)`，使 Held Value 与 Edge Baseline 立即失效；下一次 Branch Active 的 Good Sample 重新建立状态。不得把未激活 Branch 的 Bit 当成数值 Decode，也不得为未订阅 Signal 批量制造事件。
 
@@ -234,6 +243,9 @@ OUT_OF_ORDER
 RESOURCE_LIMIT
 CANCELLED
 INTERNAL_ERROR
+INVALID_VALUE
+OUT_OF_RANGE
+MULTIPLEX_INACTIVE
 ```
 
 Reason Code 采用只增不改原则；显示文本可本地化。Result Schema 中不得只保存自由文本原因。
@@ -261,6 +273,16 @@ Reason Code 采用只增不改原则；显示文本可本地化。Result Schema 
 ```
 
 Hash Algorithm、Payload Field 和 Canonicalization 发生变化时必须增加 `kind` Version，不能静默替换。Golden Test 必须固定至少一个完整向量。
+
+所有 Transaction Item 必须经统一的确定性 Factory 构造。Signal 的 `binding_id` 来自 Catalog Binding；Quality/Gap 的 `binding_id` 是以下 JCS Payload 的 SHA-256：
+
+```json
+{"event_kind":"quality_update","kind":"control-binding-id/v1","scope":{"kind":"whole_input"}}
+{"event_kind":"gap_start","kind":"control-binding-id/v1","scope":{"channel":"can0","kind":"channel"}}
+{"event_kind":"gap_end","kind":"control-binding-id/v1","scope":{"kind":"source_keys","source_keys":["x","y"]}}
+```
+
+Channel Scope 投影包含 `channel`；Source-key Scope 包含按 Unicode Scalar Value 顺序排列的 `source_keys` Array。Control Binding Hash 再作为 `event-id/v1` 的 `binding_id`，确保同一输入、Scope、Item Index 重放时得到相同 Event ID。
 
 ## 10. 初始 Diagnostic Code Namespace
 

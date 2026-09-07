@@ -195,7 +195,7 @@ evaluations:
 
 ### Event
 
-Runtime 接受有序 `SignalUpdate`、`QualityUpdate`、`GapStart`、`GapEnd`、`Watermark` 和 `EndOfStream`。Data Source 细节只保存在 Provenance。
+Runtime 接受有序的 `NormalizedTransaction | Watermark | EndOfStream` 流。`NormalizedTransaction` 原子包含 `SignalUpdate | QualityUpdate | GapStart | GapEnd` Transaction Item；Runtime 不接受脱离 Transaction Envelope 的单个 Item。Data Source 细节只保存在 Provenance。
 
 ### RuntimeContext
 
@@ -286,7 +286,7 @@ Condition 使用 Kleene 三值逻辑：
 | FALSE | TRUE |
 | UNKNOWN | UNKNOWN |
 
-AND 中 FALSE 优先；没有 FALSE 时 UNKNOWN 优先，只有双方 TRUE 才为 TRUE。OR 中 TRUE 优先；没有 TRUE 时 UNKNOWN 优先，只有双方 FALSE 才为 FALSE。Operand 缺失、过期、无效或类型不兼容时 Comparison 产生 UNKNOWN。
+AND 中 FALSE 优先；没有 FALSE 时 UNKNOWN 优先，只有双方 TRUE 才为 TRUE。OR 中 TRUE 优先；没有 TRUE 时 UNKNOWN 优先，只有双方 FALSE 才为 FALSE。逻辑原语在应用短路规则前必须验证全部 Operand 均为 `TruthValue`；其他对象属于编程错误，不得转换成 TRUE、FALSE 或 UNKNOWN。Operand 缺失、过期、无效或类型不兼容时，应由 Comparison 显式产生 UNKNOWN。
 
 UNKNOWN 是 Logical Observation；`DATA_MISSING`、`INVALID`、`NOT_EVALUATED` 等是 Evaluation/Rule Level 的 Classification 或 Reason。Adapter 禁止用 Numeric Default 替换 Bad Data。Policy 可以显式映射 UNKNOWN，但该映射必须保存并写入报告。
 
